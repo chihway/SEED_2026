@@ -184,13 +184,50 @@ def blendedness(target_img, neighbor_sum_img):
     return 1.0 - numer / denom
 
 
-def extract_cutouts(scene, stamp_size, min_flux_frac_neighbor=0.01, min_detection_snr=5.0):
+_LOCAL_PEAK_RADIUS_PIX = max(2, round(1.5 * _SIGMA_PSF_PIX))
+
+
+def local_peak_dominance(target_img, neighbor_sum_img, radius=_LOCAL_PEAK_RADIUS_PIX):
+    """
+    Is the target's own peak still the thing a real peak-finder would center
+    on, or is it just a faint bump on the wing of a much brighter neighbor?
+
+    `min_detection_snr` alone only checks the target's *isolated* flux against
+    sky noise -- it says nothing about whether the target is still separable
+    once its actual neighbor is added. A faint target sitting close to a much
+    brighter neighbor can pass the isolated-SNR cut easily while being
+    completely invisible as a distinct peak in the real (blended) image, in
+    which case a deblender's peak-finding stage would never hand it to a
+    blend-severity classifier in the first place.
+
+    Returns (is_local_max, target_frac_at_peak):
+    - is_local_max: whether the target's own peak pixel is still the argmax
+      of the combined (target + neighbor) image within a small window sized
+      to the PSF core -- fails if a nearby brighter neighbor peak wins instead.
+    - target_frac_at_peak: the target's share of the combined flux at that
+      pixel -- low if the neighbor's wing dominates even where the target
+      peaks.
+    """
+    py, px = np.unravel_index(np.argmax(target_img), target_img.shape)
+    parent = target_img + neighbor_sum_img
+    ylo, yhi = max(0, py - radius), py + radius + 1
+    xlo, xhi = max(0, px - radius), px + radius + 1
+    window = parent[ylo:yhi, xlo:xhi]
+    is_local_max = parent[py, px] >= window.max() - 1e-12
+    target_frac_at_peak = target_img[py, px] / parent[py, px] if parent[py, px] > 0 else 0.0
+    return is_local_max, target_frac_at_peak
+
+
+def extract_cutouts(scene, stamp_size, min_flux_frac_neighbor=0.01, min_detection_snr=5.0,
+                     min_local_dominance=0.5):
     """
     For every object whose stamp fits fully within the image AND that would
     plausibly be *detected* (matched-filter S/N in the truth band above
-    min_detection_snr), extract the noisy multi-band cutout plus truth
-    metrics (blendedness, neighbor count, nearest-neighbor separation/flux
-    ratio).
+    min_detection_snr) AND is still separable from its actual neighbor (its
+    own peak dominates the combined image at its own peak location, by at
+    least min_local_dominance -- see local_peak_dominance), extract the noisy
+    multi-band cutout plus truth metrics (blendedness, neighbor count,
+    nearest-neighbor separation/flux ratio).
 
     The detection cut matters: without it, ultra-faint/high-z catalog
     entries with essentially zero real flux get "classified" purely on
@@ -198,6 +235,17 @@ def extract_cutouts(scene, stamp_size, min_flux_frac_neighbor=0.01, min_detectio
     negative (both numerator and denominator are noise-level near-zero
     numbers). Real blend-severity labels only make sense for objects that
     would actually show up as a detected source in LSST.
+
+    The local-dominance cut matters separately: min_detection_snr only checks
+    the target's *isolated* flux against sky noise, so a faint target sitting
+    right next to a much brighter neighbor can pass it easily while being
+    completely swamped in the actual blended image -- undetectable as its own
+    peak, and so never handed to a blend-severity classifier by a real
+    deblender in the first place. Calibration against real cutouts (see
+    calibration_severe_ambiguous.png, 2026-07) showed a meaningful fraction of
+    nominally severe/ambiguous targets were exactly this: faint objects fully
+    swamped by a bright neighbor, not two comparably-bright overlapping
+    sources -- visually indistinguishable from a single clean isolated blob.
     """
     bands = sorted(scene["noisy_images"].keys())
     coadd_dim = scene["coadd_dim"]
@@ -242,6 +290,10 @@ def extract_cutouts(scene, stamp_size, min_flux_frac_neighbor=0.01, min_detectio
         if b is None:
             continue
 
+        is_local_max, local_dominance = local_peak_dominance(target_img, neighbor_sum)
+        if not is_local_max or local_dominance < min_local_dominance:
+            continue  # swamped by a neighbor -- not separable as its own peak
+
         n_sig_neighbors = len(neighbor_fluxes)
         if neighbor_fluxes:
             neighbor_fluxes.sort(key=lambda z: z[1])
@@ -267,6 +319,7 @@ def extract_cutouts(scene, stamp_size, min_flux_frac_neighbor=0.01, min_detectio
             "flux_ratio_nearest": float(flux_ratio_nearest),
             "redshift": float(catalog_rows["redshift"][t]),
             "r_ab": float(catalog_rows["r_ab"][t]),
+            "local_dominance": float(local_dominance),
         })
 
     return results

@@ -40,6 +40,7 @@ def generate(n_scenes, out_dir, coadd_dim=250, buff=25, stamp_size=64, seed=0):
                 "flux_ratio_nearest": r["flux_ratio_nearest"],
                 "redshift": r["redshift"],
                 "r_ab": r["r_ab"],
+                "local_dominance": r["local_dominance"],
                 "class": classify(r["blendedness"]),
             })
         if (scene_id + 1) % 50 == 0:
