@@ -42,6 +42,7 @@ seed_classifier/
   models/cnn.py         CNN backbone
   models/ordinal.py     CORN ordinal loss + prediction
   training/train.py     training loop (QWK + balanced accuracy, checkpointing)
+notebooks/             notebooks/01_intro_classifier.ipynb — start here if you're new
 reports/               session writeups (see session_report.pdf)
 data/, models/         generated outputs — gitignored, not checked in
 ```
@@ -60,6 +61,8 @@ has to coexist with PyTorch:
 conda create -n seed python=3.11
 conda activate seed
 pip install torch==2.2.2 "numpy<2" pandas pyarrow scikit-learn matplotlib astropy
+pip install jupyterlab ipykernel  # only needed for notebooks/
+python -m ipykernel install --user --name seed --display-name "Python (seed)"
 ```
 
 `simulation/blend_sim.py` reads a CatSim catalog FITS file — update `CATALOG_PATH` in
@@ -84,6 +87,23 @@ python -m seed_classifier.training.train --data-dir data/sim/run001 --epochs 40
 ```
 
 Checkpoints and normalization stats are written to `models/<run-name>/`.
+
+## New to the project? Start with the notebook
+
+[`notebooks/01_intro_classifier.ipynb`](notebooks/01_intro_classifier.ipynb) builds a
+classifier from scratch, step by step, on the small `run001` dataset — data loading,
+a configurable CNN, a plain training loop, and evaluation, all in one place with a
+single editable settings cell. It's a deliberately simplified version of the pipeline
+below (plain cross-entropy instead of the CORN ordinal loss) so the fundamentals of
+"build a network, train it, read the results" aren't buried under project-specific
+complexity. Once it makes sense, `seed_classifier/training/train.py` is the same idea
+with the ordinal loss and the full pipeline.
+
+```bash
+conda activate seed
+cd notebooks
+jupyter lab   # open 01_intro_classifier.ipynb, select the "Python (seed)" kernel
+```
 
 ## Current status
 
