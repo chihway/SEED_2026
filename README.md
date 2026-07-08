@@ -87,15 +87,33 @@ Checkpoints and normalization stats are written to `models/<run-name>/`.
 
 ## Current status
 
-Trained on 500 scenes / 6,013 cutouts. Best validation QWK: **0.40** (moderate
-agreement), balanced accuracy 0.373. The model reliably separates clean from
-ambiguous (near-zero confusion between the two extremes) but still confuses the
-moderate/severe middle classes with each other — plausibly a data-volume issue as much
-as a modeling one, since those classes have only ~300–500 examples each in this run.
-Full details, plots, and the training-stability debugging story are in
-[`reports/session_report.pdf`](reports/session_report.pdf).
+Three runs so far, scaling scene count each time:
+
+| run | scenes | cutouts | QWK | balanced acc |
+|---|---|---|---|---|
+| run001 | 500 | 6,013 | 0.40 | 0.373 |
+| run002 | 3,000 | 36,106 | 0.64 | 0.509 |
+| run003 | 10,000 | 114,418 | 0.57 | 0.443 |
+
+run001 -> run002 confirmed that the moderate/ambiguous classes were data-limited: 6x
+more scenes roughly doubled their F1. run003 added 3.3x more scenes on top of a fix to
+`extract_cutouts`'s detectability check (a target fully swamped by a bright neighbor no
+longer counts as a genuine blend). That fix turned out to remove far more of the
+**ambiguous** class than expected — its per-scene rate dropped ~15x — leaving it
+critically data-starved (153 examples total) and dragging QWK down despite clean and
+moderate both improving. **severe** stayed essentially flat across both scale-ups
+(F1 0.23 -> 0.31 -> 0.30), suggesting it's intrinsically hard to separate from its
+neighbors rather than simply short on data.
+
+Full details: [`reports/session_report.pdf`](reports/session_report.pdf) (run001),
+[`reports/run002_report.pdf`](reports/run002_report.pdf),
+[`reports/run003_report.pdf`](reports/run003_report.pdf).
 
 **Not yet done:**
-- Generate a larger dataset (more scenes) to address the moderate/severe data-volume gap
+- Investigate the ambiguous-class collapse in run003: confirm by eye that the
+  now-filtered objects are genuinely swamped-target artifacts, not over-filtering
+- Recover ambiguous-class volume (at run003's rate, ~50,000 scenes needed to match
+  run002's absolute count) or revisit the detectability threshold
+- Revisit the moderate/severe blendedness thresholds in `labeling.py` — severe's
+  plateau across two scale-ups makes this more urgent
 - Validate against the real LSST+Euclid cutouts (43 usable examples, not yet touched)
-- Revisit the moderate/severe blendedness threshold specifically
