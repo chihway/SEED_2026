@@ -38,6 +38,8 @@ aggregate metrics down even though the two big classes (clean, moderate) both im
 
 ![Cutouts per scene, run002 vs run003](run003_assets/per_scene_rate_comparison.png){ width=90% }
 
+![Example cutouts by class (run003)](run003_assets/class_examples.png){ width=95% }
+
 Clean and moderate rates are essentially unchanged scene-for-scene — the detectability
 fix doesn't touch them much. But **severe roughly halved and ambiguous collapsed
 ~15x** on a per-scene basis. The 20-scene calibration test run before merging the fix
